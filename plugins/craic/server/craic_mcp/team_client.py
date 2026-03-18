@@ -1,11 +1,12 @@
 """HTTP client for the CRAIC Team API.
 
 Wraps all team API endpoints with graceful degradation: connection
-errors, timeouts, malformed responses, and schema mismatches all
-return None instead of raising, so the MCP server can fall back to
-local-only mode.
+errors, timeouts, malformed responses, and schema mismatches return
+structured error context (for query) or None (for other methods)
+instead of raising, so the MCP server can fall back to local-only mode.
 """
 
+import dataclasses
 import logging
 
 import httpx
@@ -22,6 +23,14 @@ _DEFAULT_TIMEOUT = 5.0
 _GRACEFUL_ERRORS = (httpx.HTTPError, ValueError, ValidationError)
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class TeamQueryResult:
+    """Result of a team API query, carrying both data and error context."""
+
+    units: list[KnowledgeUnit] | None
+    error: str | None = None
+
+
 class TeamRejectedError(Exception):
     """Raised when the team API explicitly rejects a request (HTTP 4xx/5xx)."""
 
@@ -35,9 +44,11 @@ class TeamRejectedError(Exception):
 class TeamClient:
     """Async HTTP client for the CRAIC Team API.
 
-    All methods return None (or False for health) when the team API is
+    Most methods return None (or False for health) when the team API is
     unreachable or returns an unexpected response, allowing the caller
-    to degrade gracefully.
+    to degrade gracefully. ``query()`` returns a ``TeamQueryResult``
+    with error context instead of None, so callers can surface the
+    failure reason.
 
     Supports the async context manager protocol for resource-safe usage.
     """
@@ -49,7 +60,13 @@ class TeamClient:
             base_url: Team API base URL (e.g. ``http://localhost:8742``).
             timeout: Request timeout in seconds.
         """
+        self._base_url = base_url
         self._client = httpx.AsyncClient(base_url=base_url, timeout=timeout)
+
+    @property
+    def base_url(self) -> str:
+        """Return the configured team API base URL."""
+        return self._base_url
 
     async def __aenter__(self) -> "TeamClient":
         """Enter the async context manager."""
@@ -82,7 +99,7 @@ class TeamClient:
         language: str | None = None,
         framework: str | None = None,
         limit: int = 5,
-    ) -> list[KnowledgeUnit] | None:
+    ) -> TeamQueryResult:
         """Query the team store for knowledge units.
 
         Args:
@@ -92,8 +109,8 @@ class TeamClient:
             limit: Maximum results to return.
 
         Returns:
-            List of matching knowledge units, or None if the team API
-            is unreachable.
+            A TeamQueryResult with matching units, or with units=None
+            and an error message if the team API is unreachable.
         """
         params: dict[str, str | int | list[str]] = {
             "domain": domains,
@@ -106,10 +123,11 @@ class TeamClient:
         try:
             resp = await self._client.get("/query", params=params)
             resp.raise_for_status()
-            return [KnowledgeUnit.model_validate(item) for item in resp.json()]
-        except _GRACEFUL_ERRORS:
-            logger.debug("Team API query failed", exc_info=True)
-            return None
+            units = [KnowledgeUnit.model_validate(item) for item in resp.json()]
+            return TeamQueryResult(units=units)
+        except _GRACEFUL_ERRORS as exc:
+            logger.warning("Team API query failed", exc_info=True)
+            return TeamQueryResult(units=None, error=str(exc))
 
     async def propose(self, unit: KnowledgeUnit) -> KnowledgeUnit | None:
         """Push a knowledge unit to the team store.
