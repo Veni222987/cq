@@ -15,9 +15,17 @@ help:
 	@echo "  make uninstall-opencode PROJECT=/path/to/app Remove from a specific project"
 	@echo ""
 	@echo "Development:"
-	@echo "  make setup     Install all dependencies"
+	@echo "  make lint              Lint all components"
+	@echo "  make lint-cli          Lint Go CLI"
+	@echo "  make lint-sdk-go       Lint Go SDK"
+	@echo "  make lint-sdk-python   Lint Python SDK"
+	@echo "  make lint-server       Lint server and frontend"
+	@echo "  make setup             Install all dependencies"
 	@echo "  make test              Run all tests"
-	@echo "  make lint              Format, lint, and type-check all components"
+	@echo "  make test-cli          Run Go CLI tests"
+	@echo "  make test-sdk-go       Run Go SDK tests"
+	@echo "  make test-sdk-python   Run Python SDK tests"
+	@echo "  make test-server       Run server tests"
 	@echo "  make validate-schema   Validate JSON Schema fixtures"
 	@echo ""
 	@echo "Docker Compose:"
@@ -30,7 +38,9 @@ help:
 
 .PHONY: setup
 setup:
+	(cd sdk/go && $(MAKE) sync-skill)
 	(cd sdk/python && uv sync --group dev)
+	(cd cli && go mod download)
 	(cd plugins/cq/server && uv sync --group dev)
 	(cd team-api && uv sync --group dev)
 	(cd team-ui && pnpm install $(if $(CI),--frozen-lockfile,))
@@ -115,10 +125,25 @@ dev-ui:
 validate-schema:
 	cd schema && $(MAKE) validate
 
-.PHONY: lint
-lint:
+.PHONY: lint-sdk-go
+lint-sdk-go:
+	cd sdk/go && $(MAKE) lint
+
+.PHONY: lint-sdk-python
+lint-sdk-python:
+	cd sdk/python && $(MAKE) lint
+
+.PHONY: lint-cli
+lint-cli:
+	cd cli && $(MAKE) lint
+
+.PHONY: lint-server
+lint-server:
 	cd plugins/cq/server && uv run pre-commit run --all-files --config "$(CURDIR)/.pre-commit-config.yaml"
 	bash scripts/lint-frontend.sh
+
+.PHONY: lint
+lint: lint-sdk-go lint-sdk-python lint-cli lint-server
 
 .PHONY: format
 format:
@@ -136,13 +161,24 @@ typecheck:
 	cd team-api && uv sync --group dev && uvx ty check team_api --python .venv
 	cd team-ui && pnpm tsc -b
 
-.PHONY: test-python-sdk
-test-python-sdk:
+.PHONY: test-sdk-go
+test-sdk-go:
+	cd sdk/go && $(MAKE) test
+
+.PHONY: test-sdk-python
+test-sdk-python:
 	cd sdk/python && $(MAKE) test
 
-.PHONY: test
-test: validate-schema test-python-sdk
+.PHONY: test-cli
+test-cli:
+	cd cli && $(MAKE) test
+
+.PHONY: test-server
+test-server: validate-schema
 	cd plugins/cq/server && uv sync --group dev && uvx ty check cq_mcp --python .venv
 	cd team-api && uv sync --group dev && uvx ty check team_api --python .venv
 	cd plugins/cq/server && uv run pytest
 	cd team-api && uv run pytest
+
+.PHONY: test
+test: test-sdk-go test-sdk-python test-cli test-server
