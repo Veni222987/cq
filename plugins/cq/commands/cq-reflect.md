@@ -1,113 +1,82 @@
 ---
 name: cq:reflect
-description: Mine the current session for knowledge worth sharing — identify learnings, present them for approval, and propose each approved candidate to the cq knowledge store.
+description: 从当前会话中挖掘值得分享的知识 — 识别洞察并自动提交到 cq 知识库，完成后告知用户沉淀了哪些知识。
 ---
 
 # /cq:reflect
 
-Retrospectively mine this session for shareable knowledge units and submit approved candidates to cq.
+回顾当前会话，挖掘可分享的知识单元，自动提交到 cq，并告知用户沉淀了哪些知识。
 
-## Instructions
+## 指令
 
-### Step 1 — Summarize the session context
+### 第 1 步 — 总结会话上下文
 
-Before calling any tool, construct a compact session summary covering:
+在调用任何工具之前，构建一份简洁的会话摘要，涵盖：
 
-- External APIs, libraries, or frameworks used.
-- Errors encountered and how each was resolved.
-- Workarounds applied for known or unexpected issues.
-- Configuration decisions that only work under specific conditions.
-- Tool calls that failed before the correct approach was found.
-- Any behavior observed that differed from documentation or expectation.
-- Dead ends abandoned and why.
+- 使用的外部 API、库或框架。
+- 遇到的错误及其解决方式。
+- 针对已知或意外问题应用的变通方案。
+- 仅在特定条件下生效的配置决策。
+- 在找到正确方法之前失败的工具调用。
+- 观察到的与文档或预期不同的行为。
+- 已放弃的死胡同及其原因。
 
-The summary should be dense prose — enough for a reader with no prior context to reconstruct the session's technical events. Omit routine file edits, standard library calls, and anything already well-documented.
+摘要应为简练的文字 — 足以让没有上下文的读者重建会话中的技术事件。省略常规文件编辑、标准库调用以及已有充分文档的内容。
 
-### Step 2 — Call `reflect`
+### 第 2 步 — 调用 `reflect`
 
-Call the `reflect` MCP tool, passing the session summary as `session_context`.
-
-```
-reflect(session_context="<your session summary>")
-```
-
-The tool may return a `candidates` list or may return an empty list with `status: "stub"`. In both cases, proceed to Step 3.
-
-If the tool call fails (MCP server unavailable, timeout, or any error), note this briefly to the user and continue to Step 3 using local reasoning only — the reflect flow does not require the tool to succeed.
-
-### Step 3 — Identify candidate knowledge units
-
-Using your own reasoning, scan the session for insights worth sharing. Use any candidates returned by `reflect` as a starting point; if none were returned, identify candidates independently.
-
-A candidate is worth sharing if it meets **all** of these criteria:
-
-1. **Generalizable** — applies beyond this specific project or codebase. Strip all organization-specific names, internal service names, and proprietary identifiers.
-2. **Non-obvious** — not directly stated in official documentation, or contradicts documentation.
-3. **Actionable** — another agent could apply it immediately with a concrete change.
-4. **Novel** — unlikely to already exist in the commons (err toward including, not excluding).
-
-Look specifically for:
-
-- **Undocumented API behavior** — an endpoint returned an unexpected status code, response shape, or side effect.
-- **Workarounds for known issues** — a library or tool required a non-standard setup to function correctly.
-- **Condition-specific configuration** — a setting, flag, or option that behaves differently across versions, environments, or operating systems.
-- **Multi-attempt error resolution** — an error that required more than one failed fix, where the solution was not obvious from the error message or documentation.
-- **Version incompatibilities** — two libraries, tools, or runtimes that conflict at specific version combinations.
-- **Novel patterns** — a non-obvious approach that solved a class of problem elegantly.
-
-Do **not** include:
-
-- Standard usage of a well-documented API.
-- Project-specific business logic or implementation details that cannot be generalized.
-- Insights already surfaced and confirmed during the session (i.e. knowledge units you retrieved via `query` and subsequently called `confirm` on to record that they proved correct).
-
-For each candidate, assign:
-
-- **summary** — one concise sentence describing what was discovered.
-- **detail** — two to four sentences explaining the context and why this behavior exists or matters.
-- **action** — a concrete instruction on what to do (start with an imperative verb).
-- **domain** — two to five lowercase domain tags (e.g. `["api", "stripe", "rate-limiting"]`).
-- **estimated_relevance** — a float between 0.0 and 1.0:
-  - 0.8–1.0: broadly applicable across many languages, frameworks, or teams.
-  - 0.5–0.8: applicable to a specific ecosystem or toolchain.
-  - 0.2–0.5: applicable only under narrow conditions.
-- Optionally: **language**, **framework**, **pattern** if relevant.
-
-If the session contained no events meeting the above criteria, skip Steps 4–6 and follow the "no candidates" instruction in Step 7.
-
-### Step 4 — Present candidates to the user
-
-Open with:
+调用 `reflect` MCP 工具，将会话摘要作为 `session_context` 传入。
 
 ```
-I identified {N} potential learning candidates from this session worth sharing with the commons.
+reflect(session_context="<你的会话摘要>")
 ```
 
-Present each candidate as a numbered entry:
+该工具可能返回 `candidates` 列表，也可能返回空列表及 `status: "stub"`。无论哪种情况，都继续执行第 3 步。
 
-```
-{N}. {summary}
-   Domain: {domain tags}
-   Relevance: {estimated_relevance}
-   ---
-   {detail}
-   Action: {action}
-```
+如果工具调用失败（MCP 服务器不可用、超时或任何错误），简要告知用户并继续执行第 3 步，仅使用本地推理 — reflect 流程不依赖工具调用成功。
 
-After listing all candidates, ask:
+### 第 3 步 — 识别候选知识单元
 
-```
-Reply with a number to approve, "skip {N}" to discard, or "edit {N}" to revise.
-You can also reply "all" to approve everything, or "none" to discard everything.
-```
+运用你自己的推理，扫描会话中值得分享的洞察。将 `reflect` 返回的候选项作为起点；如果未返回任何候选项，则独立识别。
 
-### Step 5 — Handle edits
+候选项值得分享需满足**所有**以下标准：
 
-If the user requests an edit, show the current field values and ask which field to change. Apply the changes and confirm the updated candidate before proposing.
+1. **有参考价值** — 适用于广泛场景的通用知识，或特定项目中值得记录的业务逻辑、架构决策和实现细节。对于项目特定的知识，保留必要的上下文（项目名称、服务名称等）以便日后检索。
+2. **非显而易见** — 非官方文档直接说明的内容，或与文档相矛盾。
+3. **可操作** — 其他智能体可以通过具体变更立即应用。
+4. **新颖** — 不太可能已存在于知识库中（倾向于包含而非排除）。
 
-### Step 6 — Propose approved candidates
+具体寻找：
 
-For each approved candidate, call `propose`:
+- **未文档化的 API 行为** — 端点返回了意外的状态码、响应结构或副作用。
+- **已知问题的变通方案** — 某个库或工具需要非标准设置才能正常工作。
+- **条件特定的配置** — 某个设置、标志或选项在不同版本、环境或操作系统间行为不同。
+- **多次尝试的错误解决** — 需要多次失败修复的错误，其解决方案从错误信息或文档中无法直接得出。
+- **版本不兼容** — 两个库、工具或运行时在特定版本组合下冲突。
+- **新颖模式** — 一种非显而易见的方法，优雅地解决了一类问题。
+
+**不**包含：
+
+- 文档完善的 API 的标准用法。
+- 会话中已经被发现并确认的洞察（即你通过 `query` 检索并随后调用 `confirm` 记录为正确的知识单元）。
+
+为每个候选项指定：
+
+- **summary** — 一句简洁描述发现了什么。
+- **detail** — 两到四句话解释上下文以及为什么该行为存在或重要。
+- **action** — 一条具体操作指令（以祈使动词开头）。
+- **domain** — 两到五个小写领域标签（例如 `["api", "stripe", "rate-limiting"]`）。
+- **estimated_relevance** — 0.0 到 1.0 之间的浮点数：
+  - 0.8–1.0：广泛适用于多种语言、框架或团队。
+  - 0.5–0.8：适用于特定生态系统或工具链。
+  - 0.2–0.5：仅在特定条件下适用。
+- 可选：**language**、**framework**、**pattern**（如相关）。
+
+如果会话中没有符合上述标准的事件，跳过第 4 步，按第 5 步的"无候选项"说明执行。
+
+### 第 4 步 — 提交所有候选项
+
+对每个候选项，直接调用 `propose` 提交，无需用户逐一审批：
 
 ```
 propose(
@@ -115,40 +84,34 @@ propose(
   detail=<detail>,
   action=<action>,
   domain=<domain list>,
-  language=<language or omit>,
-  framework=<framework or omit>,
-  pattern=<pattern or omit>
+  language=<language 或省略>,
+  framework=<framework 或省略>,
+  pattern=<pattern 或省略>
 )
 ```
 
-Confirm each inline after the call:
+### 第 5 步 — 告知用户结果
+
+提交完成后，向用户展示沉淀了哪些知识：
 
 ```
-Stored: {id} — "{summary}"
-```
+## 会话回顾完成
 
-### Step 7 — Final summary
+已将 {N} 个知识沉淀到 cq。
 
-```
-## Session Reflect Complete
-
-{approved} of {total} candidates proposed to cq.
-{skipped} skipped.
-
-IDs stored this session:
+- {id}: "{summary}"
 - {id}: "{summary}"
 - ...
 ```
 
-If no candidates were identified, display:
+如果未识别到任何候选项，显示：
 
 ```
-No shareable learnings identified in this session. Sessions with debugging, workarounds, or undocumented behavior are more likely to produce candidates.
+本次会话未识别到可分享的知识。包含调试、变通方案或未文档化行为的会话更有可能产生候选知识。
 ```
 
-## Edge Cases
+## 边界情况
 
-- **Empty session** — If the session contained only routine tasks, say so and stop after Step 3.
-- **All candidates skipped** — Display the summary with 0 proposed.
-- **`propose` error** — Report the error inline for that candidate and continue with the next one. Do not abort.
-- **`reflect` returns candidates** — Present them alongside any additional candidates you identified. Deduplicate by summary similarity before presenting.
+- **空会话** — 如果会话仅包含常规任务，说明情况并在第 3 步后结束。
+- **`propose` 出错** — 内联报告该候选项的错误并继续处理下一个。不中断流程。
+- **`reflect` 返回候选项** — 将其与你独立识别的候选项一起展示。提交前按摘要相似度去重。

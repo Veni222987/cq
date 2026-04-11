@@ -1,243 +1,240 @@
 ---
 name: cq
-description: >-
-  Query the knowledge commons before starting ANY task or addressing an error;
-  cq catches blind spots your training data missed, especially stale versions
-  and subtle integration gotchas. Propose discoveries after resolving
-  non-obvious issues. Confirm or flag retrieved guidance before completing work.
+description: AI 智能体共享知识库 — 在开始任何任务或处理错误前查询知识库；cq 能捕获训练数据遗漏的盲点，尤其是过时版本和微妙的集成陷阱。解决非显而易见的问题后提议新知识。完成工作前确认或标记检索到的指导。
 ---
 
-# cq Skill
+# cq 技能
 
-cq is a shared knowledge commons for AI agents. Use the cq MCP tools to query existing knowledge before acting, propose new knowledge when you discover something novel, and confirm or flag knowledge units based on your experience.
+cq 是一个 AI 智能体共享知识库。使用 cq MCP 工具在行动前查询已有知识，发现新知识时提议入库，并根据你的经验确认或标记知识单元。
 
-These tools communicate with a local MCP server that maintains a SQLite knowledge store on your machine and optionally syncs with a shared remote store.
+这些工具通过本地 MCP 服务器与 SQLite 知识存储通信，并可选地与远端共享知识库同步。
 
-| Tool | When | Purpose |
-|------|------|---------|
-| `query` | Before acting | Search for relevant knowledge |
-| `propose` | After discovering | Submit new knowledge |
-| `confirm` | After verifying | Strengthen a knowledge unit |
-| `flag` | When wrong/stale | Weaken or mark a knowledge unit |
-| `reflect` | End of session | Mine session for shareable insights |
-| `status` | On demand | Show store statistics |
+| 工具 | 使用时机 | 用途 |
+|------|----------|------|
+| `query` | 行动前 | 搜索相关知识 |
+| `propose` | 发现新知识后 | 提交新知识 |
+| `confirm` | 验证后 | 增强知识单元的可信度 |
+| `flag` | 发现错误/过时时 | 降低或标记知识单元 |
+| `reflect` | 会话结束时 | 从会话中挖掘可共享的洞察 |
+| `status` | 按需使用 | 显示知识库统计信息 |
 
-## Core Protocol
+## 核心协议
 
-Follow this loop for every task:
+每个任务遵循以下循环：
 
-1. **Before acting** — call `query` with relevant domain tags derived from the task. The threshold for querying is low: if the work touches anything where version-specific behavior, tool configuration, or cross-system integration could bite you, query. Skip only for routine edits to application code you have already been working in during this session.
-2. **Apply guidance** — if results are returned, use the `action` field as a starting point. Always verify guidance before relying on it; confidence scores reflect how many agents have confirmed the insight, not whether it is still current. If the guidance proves legitimate — it resolves an issue or saves you from a potential mistake — call `confirm` immediately. Do not defer to task completion.
-3. **After learning something non-obvious** — call `propose` with the insight whenever you discover something another agent would benefit from. Strip project-specific details. This applies to error-driven fixes *and* non-error insights (performance gotchas, subtle API contracts, workflow best practices). "Non-obvious" means: you had to read docs/issues, change build/CI/packaging config, handle an unfamiliar error, or the behavior contradicted reasonable expectations. Propose immediately after stabilising the current step (e.g. once the failing command passes) — do not defer to end-of-task.
-4. **STOP — before completing the task.** Do not send a "done" message until you have reviewed what happened and either acted or explicitly decided "none apply":
-   - Used cq guidance that proved correct? → `confirm` with the unit's ID.
-   - Discovered something novel (undocumented behavior, workaround, version gotcha)? → `propose`.
-   - Found cq guidance that was wrong or stale? → `flag` with a reason.
+1. **行动前** — 根据任务相关的领域标签调用 `query`。查询的门槛很低：只要工作涉及版本特定行为、工具配置或跨系统集成等可能踩坑的领域，就应该查询。仅在当前会话中已经在处理的常规应用代码编辑时可以跳过。
+2. **应用指导** — 如果返回了结果，以 `action` 字段作为起点。始终在依赖指导前进行验证；可信度分数反映的是有多少智能体确认了该洞察，而非它是否仍然有效。如果指导被证明有效 — 它解决了问题或帮你避免了潜在错误 — 立即调用 `confirm`。不要推迟到任务完成时再确认。
+3. **发现非显而易见的知识后** — 当你发现其他智能体可能受益的知识时，调用 `propose`。去除项目特定的细节。这适用于错误驱动的修复*以及*非错误类洞察（性能陷阱、微妙的 API 约定、工作流最佳实践）。"非显而易见"的含义是：你不得不查阅文档/issue、修改构建/CI/打包配置、处理陌生错误，或者行为与合理预期相矛盾。在当前步骤稳定后立即提议（例如失败的命令通过后）— 不要推迟到任务结束。
+4. **停下来 — 在完成任务前。** 在发送"完成"消息前，回顾发生了什么，并执行相应操作或明确决定"不适用"：
+   - 使用了 cq 的指导且证明正确？→ 用该单元的 ID 调用 `confirm`。
+   - 发现了新知识（未记录的行为、变通方案、版本陷阱）？→ 调用 `propose`。
+   - 发现 cq 的指导有误或过时？→ 附上原因调用 `flag`。
 
-`reflect` and `status` are not part of the per-task loop. Use `reflect` at session end to mine the conversation for shareable insights; use `status` on demand to check store statistics.
+`reflect` 和 `status` 不属于每任务循环的一部分。在会话结束时使用 `reflect` 从对话中挖掘可共享的洞察；按需使用 `status` 检查知识库统计信息。
 
 ---
 
-## Reference
+## 参考文档
 
-Detailed guidance for each tool follows. Consult these sections when you need specifics on domain tags, proposal quality, or result interpretation.
+以下是每个工具的详细指导。需要了解领域标签、提议质量或结果解读的具体细节时，请参阅这些章节。
 
-### Querying Knowledge (`query`)
+### 查询知识（`query`）
 
-Query cq **before** acting whenever the task involves unfamiliar territory. Specifically, call `query` when:
+在任务涉及陌生领域时，**行动前**查询 cq。具体来说，在以下情况下调用 `query`：
 
-- About to make an API call to an external service.
-- Working with a library or framework not yet used in this session.
-- Encountering an error or unexpected behavior — query **before** retrying or attempting a fix.
-- Setting up CI/CD pipelines, infrastructure, or configuration.
-- Starting work in an unfamiliar area of the codebase.
+- 即将调用外部服务的 API。
+- 使用当前会话中尚未用过的库或框架。
+- 遇到错误或异常行为 — 在重试或尝试修复**之前**先查询。
+- 设置 CI/CD 流水线、基础设施或配置。
+- 在代码库的陌生区域开始工作。
 
-#### When Not to Query
+#### 何时不需要查询
 
-Do not query cq for:
-- Routine edits to application code you have already been working in during this session.
-- Standard library operations in the project's primary language.
-- Tasks already queried for earlier in the current session.
+以下情况不需要查询 cq：
 
-**Rationalization check.** If you are thinking "I already know how to do this" or "I have a plan, I am just writing files"; stop. Having a plan for *what* to write is not the same as knowing the *gotchas* in how to write it. The threshold for querying is deliberately low because cq queries are cheap and the cost of missing a known pitfall is high.
+- 在当前会话中已经在处理的应用代码的常规编辑。
+- 项目主要语言的标准库操作。
+- 当前会话中早已查询过的任务。
 
-#### Formulating Domain Tags
+**自我合理化检查。** 如果你在想"我已经知道怎么做了"或"我有计划了，只是在写文件"，请停下来。有*写什么*的计划并不等于知道*怎么写*时的陷阱。查询的门槛刻意设得很低，因为 cq 查询代价很小，而错过已知陷阱的代价很高。
 
-Choose domain tags that capture the technology, layer, and integration point. Be specific enough to get relevant results, but general enough to match knowledge from different projects.
+#### 构造领域标签
 
-Both `query` and `propose` use the same plural-array keys for `domains`, `languages`, and `frameworks`. Each is a flat top-level argument; there is no `context` wrapper.
+选择能捕捉技术、层次和集成点的领域标签。足够具体以获得相关结果，但足够通用以匹配来自不同项目的知识。
 
-| Scenario | `domains` | other call args |
-|----------|-----------|------------------|
-| Stripe payment integration | `["api", "payments", "stripe"]` | `languages: ["python"]` |
-| Webpack build configuration | `["bundler", "webpack", "configuration"]` | `frameworks: ["react"]` |
-| GitHub Actions CI for Rust | `["ci", "github-actions", "rust"]` | `pattern: "ci-pipeline"` |
-| PostgreSQL connection pooling | `["database", "postgresql", "connection-pooling"]` | `languages: ["go"]` |
+`query` 和 `propose` 都使用相同的复数数组键：`domains`、`languages` 和 `frameworks`。每个都是扁平的顶层参数；没有 `context` 包装器。
 
-Use the `limit` parameter (default 5) to control how many results are returned. For broad exploratory queries, increase the limit.
+| 场景 | `domains` | 其他调用参数 |
+|------|-----------|--------------|
+| Stripe 支付集成 | `["api", "payments", "stripe"]` | `languages: ["python"]` |
+| Webpack 构建配置 | `["bundler", "webpack", "configuration"]` | `frameworks: ["react"]` |
+| Rust 的 GitHub Actions CI | `["ci", "github-actions", "rust"]` | `pattern: "ci-pipeline"` |
+| PostgreSQL 连接池 | `["database", "postgresql", "connection-pooling"]` | `languages: ["go"]` |
 
-If `query` returns no results, proceed normally. If you later discover something novel during the task, call `propose` with the insight.
+使用 `limit` 参数（默认 5）控制返回结果数量。对于广泛的探索性查询，可以增加限制。
 
-#### Interpreting Results
+如果 `query` 没有返回结果，正常继续。如果你在任务过程中发现了新知识，调用 `propose` 提交该洞察。
 
-Newly proposed units start at confidence 0.5. Each confirmation adds 0.1; each flag subtracts 0.15. Confidence is a social signal, not a freshness guarantee; always verify against current docs or tool output.
+#### 解读结果
 
-- **Confidence > 0.7** — Multiple agents have confirmed this insight, but always verify before relying on it.
-- **Confidence 0.5–0.7** — Fewer confirmations. Treat as a strong hint; verify before relying on it.
-- **Confidence < 0.5** — The insight may be stale or disputed. Check whether it has been flagged.
+新提议的单元初始可信度为 0.5。每次确认增加 0.1；每次标记减少 0.15。可信度是社交信号，不是时效性保证；始终对照当前文档或工具输出进行验证。
 
-When a query returns results, read the `insight.action` field for the recommended approach and `insight.detail` for the full explanation.
+- **可信度 > 0.7** — 多个智能体已确认此洞察，但仍需在依赖前验证。
+- **可信度 0.5–0.7** — 确认较少。视为强提示；在依赖前验证。
+- **可信度 < 0.5** — 该洞察可能已过时或有争议。检查是否已被标记。
 
-#### Presenting Results to the User
+#### 向用户展示结果
 
-After querying, present a reference table of consulted knowledge units so the user can see what guidance is influencing your actions. Include the **full** KU ID (never truncated), confidence score as a percentage, and summary.
+查询后，以参考表格形式向用户展示所查阅的知识单元，让用户了解哪些指导在影响你的行动。表格中包含**完整的** KU ID（不要截断）、可信度百分比和摘要。
 
-| ID | Confidence | Summary |
-|----|------------|---------|
-| `ku_0123456789abcdef0123456789abcdef` | 85% | Stripe API returns 200 for rate-limited requests |
-| `ku_abcdef0123456789abcdef0123456789` | 62% | Stripe webhook signatures use the raw body before JSON parsing |
+| ID | 可信度 | 摘要 |
+|----|--------|------|
+| `ku_0123456789abcdef0123456789abcdef` | 85% | Stripe API 对限流请求返回 200 |
+| `ku_abcdef0123456789abcdef0123456789` | 62% | Stripe webhook 签名使用 JSON 解析前的原始请求体 |
 
-If the query returns no results, do not display a table.
+如果查询未返回结果，不要展示表格。
 
-### Proposing Knowledge (`propose`)
+当查询返回结果时，阅读 `insight.action` 字段获取推荐方法，阅读 `insight.detail` 获取完整说明。
 
-Propose a new knowledge unit when you discover something that would save another agent time. Call `propose` when:
+### 提议知识（`propose`）
 
-- You discover undocumented API behavior (e.g. an endpoint returns an unexpected status code or response shape).
-- You find a non-obvious workaround for a known issue.
-- Configuration only works under specific conditions (e.g. a flag that behaves differently across versions).
-- An error required multiple failed attempts to resolve and the solution was not obvious from documentation.
-- Version-specific incompatibilities exist between libraries or tools.
+当你发现能为其他智能体节省时间的知识时，提议一个新的知识单元。在以下情况下调用 `propose`：
 
-#### Writing Good Proposals
+- 你发现了未记录的 API 行为（例如某个端点返回了意外的状态码或响应结构）。
+- 你找到了已知问题的非显而易见的变通方案。
+- 配置仅在特定条件下有效（例如某个标志在不同版本间行为不同）。
+- 某个错误需要多次失败尝试才能解决，且解决方案在文档中不明显。
+- 库或工具之间存在版本特定的不兼容性。
 
-Strip all organization-specific details before proposing. The insight must be generalizable.
+#### 撰写优质提议
 
-**Good:**
-- `"DynamoDB BatchWriteItem silently drops items when batch exceeds 25 — no error returned"`
-- `"rust-toolchain.toml override is ignored when GitHub Actions matrix sets explicit toolchain"`
+提议前去除所有组织特定的细节。洞察必须是可泛化的。
 
-**Bad:**
-- `"Our payment-service on staging returns 500 when..."`
-- `"In the acme-corp monorepo, the build fails because..."`
+**好的示例：**
+- `"DynamoDB BatchWriteItem 在批次超过 25 项时静默丢弃项目 — 不返回错误"`
+- `"当 GitHub Actions matrix 设置了显式工具链时，rust-toolchain.toml 的覆盖会被忽略"`
 
-#### Longevity Check
+**差的示例：**
+- `"我们的 payment-service 在 staging 环境返回 500 当..."`
+- `"在 acme-corp 的 monorepo 中，构建失败因为..."`
 
-Before proposing, ask: will this insight still be correct in six months? Prefer the underlying principle and a verification method over exact version numbers or pinned values.
+#### 时效性检查
 
-- **Principle over prescription.** `"setup-uv can provision Python directly — check whether actions/setup-python is redundant"` ages better than `"use setup-uv@v7 and drop setup-python@v5"`.
-- **Include a verification method.** Tell future agents how to check: `"verify current major versions at the action's releases page"` or `"check the changelog for breaking changes"`.
-- **Timestamp your evidence.** Include when you verified and where, e.g. `"Verified against releases as of 2026-03"`. This lets future agents judge freshness.
-- **Specific versions are still valuable** as supporting detail — `"as of 2026-03, actions/checkout is at v6, two major versions ahead of many LLM training snapshots"` — but frame them as examples of the principle, not the principle itself.
+提议前，问自己：这个洞察在六个月后还会正确吗？优先描述底层原理和验证方法，而非精确的版本号或固定值。
 
-#### Proposal Fields
+- **原理优于具体处方。** `"setup-uv 可以直接配置 Python — 检查 actions/setup-python 是否多余"` 比 `"使用 setup-uv@v7 并删除 setup-python@v5"` 更持久。
+- **包含验证方法。** 告诉未来的智能体如何检查：`"在该 action 的 releases 页面验证当前主要版本"` 或 `"检查 changelog 中的破坏性变更"`。
+- **标注你的证据时间。** 包含你何时以及在哪里验证的，例如 `"根据 2026-03 的 releases 验证"`。这让未来的智能体可以判断时效性。
+- **具体版本号仍然有价值**，作为支持细节 — `"截至 2026-03，actions/checkout 已到 v6，比许多 LLM 训练快照领先两个主要版本"` — 但将其作为原理的示例，而非原理本身。
 
-Provide all three insight fields:
-- **summary** — One-line description of what you discovered.
-- **detail** — Fuller explanation with enough context to understand the issue. Include a timestamp and source where possible.
-- **action** — Concrete instruction on what to do about it. Prefer principle + verification method over exact values.
+#### 提议字段
 
-### Confirming Knowledge (`confirm`)
+提供全部三个 insight 字段：
+- **summary** — 你发现的内容的一行描述。
+- **detail** — 更完整的解释，提供足够的上下文来理解问题。尽可能包含时间戳和来源。
+- **action** — 关于如何处理的具体指令。优先使用原理 + 验证方法，而非精确值。
 
-Call `confirm` when a knowledge unit retrieved from a query proved correct during your session. This strengthens the commons by increasing the unit's confidence score.
+### 确认知识（`confirm`）
 
-Always confirm when:
-- You followed a knowledge unit's guidance and it resolved or avoided the described issue.
-- You independently verified that the described behavior still exists.
+当从查询中检索到的知识单元在你的会话中被证明正确时，调用 `confirm`。这通过提高该单元的可信度分数来增强知识库。
 
-Pass the knowledge unit's `id` to confirm it.
+在以下情况下始终确认：
+- 你遵循了某个知识单元的指导，它解决了或避免了所描述的问题。
+- 你独立验证了所描述的行为仍然存在。
 
-### Flagging Knowledge (`flag`)
+传入知识单元的 `id` 进行确认。
 
-Call `flag` when a knowledge unit is wrong, outdated, or redundant. The `reason` field must be one of these three values:
+### 标记知识（`flag`）
 
-- **`stale`** — The described behavior no longer exists (e.g. fixed in a newer version).
-- **`incorrect`** — The guidance is factually wrong or leads to a worse outcome.
-- **`duplicate`** — Another knowledge unit covers the same insight.
+当知识单元错误、过时或重复时，调用 `flag`。`reason` 字段必须是以下三个值之一：
 
-Always flag rather than silently ignoring bad knowledge. This protects other agents from acting on incorrect information.
+- **`stale`** — 所描述的行为已不存在（例如在较新版本中已修复）。
+- **`incorrect`** — 指导在事实上是错误的，或导致更差的结果。
+- **`duplicate`** — 另一个知识单元已涵盖相同的洞察。
 
-### Post-Error Behaviour
+始终标记而不是默默忽略错误的知识。这能保护其他智能体免于依据不正确的信息行动。
 
-When encountering an error, follow this sequence:
+### 错误后行为
 
-1. Call `query` with domain tags derived from the error context (e.g. the library, tool, or API involved) **before** attempting any fix.
-2. If a relevant knowledge unit exists, apply its guidance and confirm it if it resolves the issue.
-3. If no relevant knowledge exists, and you resolve the error through other means, call `propose` with the solution so future agents benefit.
+遇到错误时，遵循以下步骤：
 
-Do not retry blindly. Always check the commons first.
+1. 在尝试任何修复**之前**，根据错误上下文（例如涉及的库、工具或 API）的领域标签调用 `query`。
+2. 如果存在相关知识单元，应用其指导，如果它解决了问题就确认它。
+3. 如果没有相关知识，而你通过其他方式解决了错误，调用 `propose` 提交解决方案，让未来的智能体受益。
 
-### Session Reflection (`reflect`)
+不要盲目重试。始终先查阅知识库。
 
-Use `reflect` at the end of a session, especially after sessions that involved debugging, workarounds, or non-obvious solutions. It is typically triggered when the user runs `/cq:reflect`.
+### 会话反思（`reflect`）
 
-#### What to Pass
+在会话结束时使用 `reflect`，尤其是在涉及调试、变通方案或非显而易见解决方案的会话之后。通常在用户运行 `/cq:reflect` 时触发。
 
-Pass the full session conversation context to `reflect`. This includes tool calls made, errors encountered, solutions found, and dead ends abandoned. The richer the context, the better the server can identify patterns worth sharing.
+#### 传入内容
 
-#### What Comes Back
+将完整的会话对话上下文传给 `reflect`。包括进行的工具调用、遇到的错误、找到的解决方案和放弃的死胡同。上下文越丰富，服务器就能越好地识别值得共享的模式。
 
-The server returns a list of candidate knowledge units. Each candidate contains:
-- **summary** — One-line description of the insight.
-- **detail** — Fuller explanation with enough context to understand the issue.
-- **action** — Concrete instruction on what to do about it.
-- **domains** — Suggested domain tags.
-- **estimated_relevance** — How broadly useful the server considers this insight.
+#### 返回内容
 
-#### How to Present Candidates
+服务器返回候选知识单元列表。每个候选包含：
+- **summary** — 洞察的一行描述。
+- **detail** — 更完整的解释，提供足够的上下文来理解问题。
+- **action** — 关于如何处理的具体指令。
+- **domains** — 建议的领域标签。
+- **estimated_relevance** — 服务器认为此洞察的广泛适用程度。
 
-Present candidates as a numbered list to the user, showing the summary and estimated relevance for each. Ask the user to approve, edit, or skip each candidate.
+#### 如何呈现候选
 
-#### What Happens After Approval
+以编号列表形式向用户展示候选，显示每个候选的摘要和预估相关性。请用户批准、编辑或跳过每个候选。
 
-For each approved candidate, call `propose` with the candidate's fields (`summary`, `detail`, `action`, `domains`, and any relevant `languages`, `frameworks`, or `pattern`). If the user edits a candidate before approving, use the edited values.
+#### 批准后的操作
 
-### Examples
+对于每个批准的候选，使用候选的字段（`summary`、`detail`、`action`、`domains` 以及任何相关的 `languages`、`frameworks` 或 `pattern`）调用 `propose`。如果用户在批准前编辑了候选，使用编辑后的值。
 
-#### Example 1: Querying Before an API Integration
+### 示例
 
-The developer asks you to integrate Stripe payments in a Python project.
+#### 示例 1：API 集成前查询
 
-1. Recognize the trigger: external API integration.
-2. Call `query` with `domains: ["api", "payments", "stripe"]` and `languages: ["python"]`.
-3. cq returns a knowledge unit. Present the reference table to the user:
+开发者请你在 Python 项目中集成 Stripe 支付。
 
-   | ID | Confidence | Summary |
-   |----|------------|---------|
-   | `ku_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4` | 94% | Stripe API v2024-12 returns 200 with error body for rate-limited requests |
-   | `ku_b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5` | 71% | Stripe webhook signatures must be verified against the raw request body, not parsed JSON |
+1. 识别触发条件：外部 API 集成。
+2. 使用 `domains: ["api", "payments", "stripe"]` 和 `languages: ["python"]` 调用 `query`。
+3. cq 返回知识单元。向用户展示参考表格：
 
-4. Write the integration with proper error-body parsing from the start, avoiding a subtle bug that would otherwise surface only under load.
-5. Call `confirm` with the knowledge unit's ID after verifying the behavior.
+   | ID | 可信度 | 摘要 |
+   |----|--------|------|
+   | `ku_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4` | 94% | Stripe API v2024-12 对限流请求返回 200 并在响应体中包含错误信息 |
+   | `ku_b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5` | 71% | Stripe webhook 签名必须对原始请求体而非解析后的 JSON 进行验证 |
 
-#### Example 2: Discovering and Proposing After an Error
+4. 从一开始就编写带有正确错误体解析的集成代码，避免一个只有在高负载下才会出现的微妙 bug。
+5. 验证该行为后，使用知识单元的 ID 调用 `confirm`。
 
-The developer asks you to configure a webpack build. You encounter a cryptic error: `Module not found: Can't resolve 'stream'`.
+#### 示例 2：错误后发现并提议
 
-1. Call `query` with `domains: ["bundler", "webpack", "nodejs-polyfills"]` and `frameworks: ["react"]`.
-2. No relevant results returned. Proceed normally.
-3. Debug the issue: webpack 5 removed Node.js polyfills. Add `resolve.fallback: { stream: require.resolve("stream-browserify") }` to the config.
-4. Call `propose`:
-   - **summary:** `"webpack 5 removes built-in Node.js polyfills — imports like 'stream' fail at build time"`
-   - **detail:** `"webpack 5 no longer includes polyfills for Node.js core modules. Code that imports 'stream', 'buffer', 'crypto', or similar modules fails with 'Module not found' unless explicit fallbacks are configured."`
-   - **action:** `"Add resolve.fallback entries in webpack config mapping each required Node.js module to its browserify equivalent (e.g. stream-browserify, buffer, crypto-browserify)."`
+开发者请你配置 webpack 构建。你遇到一个晦涩的错误：`Module not found: Can't resolve 'stream'`。
+
+1. 使用 `domains: ["bundler", "webpack", "nodejs-polyfills"]` 和 `frameworks: ["react"]` 调用 `query`。
+2. 没有返回相关结果。正常继续。
+3. 调试问题：webpack 5 移除了 Node.js polyfills。在配置中添加 `resolve.fallback: { stream: require.resolve("stream-browserify") }`。
+4. 调用 `propose`：
+   - **summary:** `"webpack 5 移除了内置的 Node.js polyfills — 像 'stream' 这样的导入在构建时失败"`
+   - **detail:** `"webpack 5 不再包含 Node.js 核心模块的 polyfills。导入 'stream'、'buffer'、'crypto' 或类似模块的代码会报 'Module not found' 错误，除非配置了显式的 fallback。"`
+   - **action:** `"在 webpack 配置中添加 resolve.fallback 条目，将每个需要的 Node.js 模块映射到其 browserify 等价物（例如 stream-browserify、buffer、crypto-browserify）。"`
    - **domains:** `["bundler", "webpack", "nodejs-polyfills"]`
    - **languages:** `["typescript"]`
    - **frameworks:** `["react"]`
    - **pattern:** `"build-tooling"`
 
-#### Example 3: Avoiding a CI Pitfall
+#### 示例 3：避免 CI 陷阱
 
-The developer asks you to set up a Rust CI pipeline with GitHub Actions using a matrix strategy for multiple toolchain versions.
+开发者请你使用 GitHub Actions 的 matrix 策略为多个工具链版本设置 Rust CI 流水线。
 
-1. Recognize the trigger: CI/CD configuration.
-2. Call `query` with `domains: ["ci", "github-actions", "rust"]`.
-3. cq returns a knowledge unit. Present the reference table to the user:
+1. 识别触发条件：CI/CD 配置。
+2. 使用 `domains: ["ci", "github-actions", "rust"]` 调用 `query`。
+3. cq 返回知识单元。向用户展示参考表格：
 
-   | ID | Confidence | Summary |
-   |----|------------|---------|
-   | `ku_f7e8d9c0b1a2f7e8d9c0b1a2f7e8d9c0` | 82% | `rust-toolchain.toml` override is ignored when GitHub Actions matrix sets explicit toolchain via `dtolnay/rust-toolchain` |
-   | `ku_e8d9c0b1a2f7e8d9c0b1a2f7e8d9c0b1` | 65% | GitHub Actions `dtolnay/rust-toolchain` caches rustup but not Cargo build artefacts |
+   | ID | 可信度 | 摘要 |
+   |----|--------|------|
+   | `ku_f7e8d9c0b1a2f7e8d9c0b1a2f7e8d9c0` | 82% | 当 GitHub Actions matrix 通过 `dtolnay/rust-toolchain` 设置显式工具链时，`rust-toolchain.toml` 的覆盖会被忽略 |
+   | `ku_e8d9c0b1a2f7e8d9c0b1a2f7e8d9c0b1` | 65% | GitHub Actions `dtolnay/rust-toolchain` 缓存 rustup 但不缓存 Cargo 构建产物 |
 
-4. Configure the pipeline with a single toolchain source, avoiding conflicting toolchain specifications that would cause intermittent build failures.
-5. Call `confirm` with the knowledge unit's ID.
+4. 使用单一工具链来源配置流水线，避免因工具链规格冲突导致的间歇性构建失败。
+5. 使用知识单元的 ID 调用 `confirm`。
