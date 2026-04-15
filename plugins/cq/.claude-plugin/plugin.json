@@ -4,10 +4,10 @@
   "description": "Shared knowledge commons for AI agents; find, share, and confirm collective knowledge to stop rediscovering the same failures.",
   "author": {
     "name": "Mozilla AI",
-    "email": "hello@mozilla.ai",
-    "url": "https://github.com/mozilla-ai/"
+    "email": "veni222987@gmail.com",
+    "url": "https://github.com/Veni222987/"
   },
-  "repository": "https://github.com/mozilla-ai/cq",
+  "repository": "https://github.com/Veni222987/cq.git",
   "license": "Apache-2.0",
   "keywords": ["knowledge-sharing", "agent-learning", "agent-commons", "pitfall-avoidance", "team-knowledge"],
   "commands": "./commands/",
