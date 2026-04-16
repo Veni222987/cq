@@ -1,7 +1,7 @@
 {
   "name": "cq",
   "owner": {
-    "name": "Mozilla AI"
+    "name": "Veni"
   },
   "metadata": {
     "description": "Shared knowledge commons for AI agents; find, share, and confirm collective knowledge to stop rediscovering the same failures."
